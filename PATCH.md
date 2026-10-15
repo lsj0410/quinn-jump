@@ -91,4 +91,4 @@ if options.jump {
 |----------|-------|---------|
 | `Opt` struct | +10 | `--jump`, `--jump-addr` flags |
 | `run()` body | +20 | Jump block: bind, rebind, verify, key update |
-| **Total** | **~30** | Single file, no new dependencies |
+| **Total** | **~30** | |
