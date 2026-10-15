@@ -10,9 +10,10 @@ No quinn internals are modified in this patch.
 ## How to apply
 
 ```bash
+git clone https://github.com/lsj0410/quinn-jump.git
 git clone https://github.com/quinn-rs/quinn.git
 cd quinn
-git apply ../quinn-client-jump.patch
+git apply ../quinn-jump/quinn-client-jump.patch
 ```
 
 ## How to run
