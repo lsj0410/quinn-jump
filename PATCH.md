@@ -1,4 +1,4 @@
-# quinn client Jump patch — edits explained
+# quinn client Jump patch
 
 This patch lets the quinn example client perform a Jump handshake with the example server.
 Jump defends against Harvest-Now-Decrypt-Later attacks by separating TLS key exchange material (K) from application ciphertext (C) across two network paths.
@@ -18,10 +18,7 @@ git apply ../quinn-client-jump.patch
 ## How to run
 
 ```bash
-# Terminal 1
 cargo run --example server ./
-
-# Terminal 2
 cargo run --example client -- --jump --jump-addr ::1 https://localhost:4433/Cargo.toml
 ```
 
@@ -39,20 +36,18 @@ jump: bool,
 jump_addr: Option<std::net::IpAddr>,
 ```
 
-**`--jump`** — enables the Jump protocol. When set, the client completes the
-handshake on the initial socket, migrates to the address given by `--jump-addr`,
-performs an RFC 9001 key update, and only then opens a QUIC stream.
+**`--jump`** — enables the Jump protocol.
+When set, the client completes the handshake on the initial socket, migrates to the address given by `--jump-addr`, performs a QUIC key update, and only then opens a QUIC stream.
 
 **`--jump-addr <IP>`** — the local IP address to bind the Path 2 socket to.
-The user provides an IP directly (e.g. `::1`, `10.0.0.2`) rather than an
-interface name, so no platform-specific interface resolution is needed. clap
-enforces this is present whenever `--jump` is set via `required_if_eq`.
+clap enforces this is present whenever `--jump` is set via `required_if_eq`.
 
 ---
 
 ## 2. Jump block in `run()`
 
-Inserted between `connected at` and `open_bi()`. Only runs when `--jump` is set.
+Inserted between `connected at` and `open_bi()`.
+Only runs when `--jump` is set.
 
 ```rust
 if options.jump {
@@ -74,30 +69,15 @@ if options.jump {
 }
 ```
 
-**Step by step:**
+1. **Bind a new socket on Path 2** — `std::net::UdpSocket::bind(SocketAddr::new(path2_ip, 0))` creates a UDP socket bound to the user-provided IP with an ephemeral port chosen by the OS.
 
-1. **Bind a new socket on Path 2** — `std::net::UdpSocket::bind(SocketAddr::new(path2_ip, 0))`
-   creates a UDP socket bound to the user-provided IP with an ephemeral port
-   chosen by the OS.
+2. **Rebind the endpoint** — `endpoint.rebind(path2_socket)` swaps the underlying UDP socket inside the quinn `Endpoint`. All subsequent sends go out through the new socket (connection migration).
 
-2. **Rebind the endpoint** — `endpoint.rebind(path2_socket)` atomically swaps the
-   underlying UDP socket inside the quinn `Endpoint`. All subsequent sends go out
-   through the new socket. This is the QUIC connection migration mechanism; no
-   quinn internals need to be patched because `rebind` is a public API.
+3. **Verify the rebind** — `endpoint.local_addr()?.ip()` is compared against `path2_ip`.
 
-3. **Verify the rebind** — `endpoint.local_addr()?.ip()` is compared against
-   `path2_ip`. On macOS, a full-tunnel VPN intercepts `bind()` at the kernel level
-   and silently redirects all traffic back through the tunnel. This check detects
-   that failure mode.
+4. **Force a key update** — `conn.force_key_update()` queues a QUIC key update, where the Key Phase bit on the next outgoing packet is flipped and new AEAD keys are derived via HKDF.
 
-4. **Force a key update** — `conn.force_key_update()` queues an RFC 9001 key
-   update. Quinn flips the Key Phase bit on the next outgoing packet and derives
-   new AEAD keys using HKDF. After this point, any 1-RTT packet captured on Path 2
-   is protected by keys that were never transmitted on Path 1.
-
-5. **Gate application data** — `conn.open_bi()` is called only after this block
-   completes. No QUIC stream is opened until migration and key update have both
-   succeeded.
+5. **Gate application data** — `conn.open_bi()` is called only after this block completes. No QUIC stream is opened until migration and key update have both happened.
 
 ---
 
