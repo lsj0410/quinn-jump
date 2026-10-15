@@ -1,0 +1,47 @@
+diff --git a/quinn/examples/client.rs b/quinn/examples/client.rs
+index 219038a..34b961a 100644
+--- a/quinn/examples/client.rs
++++ b/quinn/examples/client.rs
+@@ -42,6 +42,16 @@ struct Opt {
+     #[clap(long = "rebind")]
+     rebind: bool,
+ 
++    /// Perform Jump: complete handshake on the current path, migrate to
++    /// --jump-addr, perform a key update, then open streams.
++    #[clap(long = "jump")]
++    jump: bool,
++
++    /// Local IP address to use as the Jump data path (e.g. "127.0.0.1", "10.0.0.2").
++    /// Required when --jump is set.
++    #[clap(long = "jump-addr", required_if_eq("jump", "true"))]
++    jump_addr: Option<std::net::IpAddr>,
++
+     /// Address to bind on
+     #[clap(long = "bind", default_value = "[::]:0")]
+     bind: SocketAddr,
+@@ -117,6 +127,25 @@ async fn run(options: Opt) -> Result<()> {
+         .await
+         .map_err(|e| anyhow!("failed to connect: {}", e))?;
+     eprintln!("connected at {:?}", start.elapsed());
++
++    if options.jump {
++        let path2_ip = options.jump_addr.unwrap();
++        let path2_socket = std::net::UdpSocket::bind(SocketAddr::new(path2_ip, 0))?;
++        let path2_local = path2_socket.local_addr()?;
++        eprintln!("jump: migrating to {path2_local}");
++        endpoint
++            .rebind(path2_socket)
++            .map_err(|e| anyhow!("rebind failed: {e}"))?;
++        if endpoint.local_addr()?.ip() != path2_ip {
++            return Err(anyhow!(
++                "rebind verification failed: local addr is {}, expected {path2_ip}",
++                endpoint.local_addr()?.ip()
++            ));
++        }
++        conn.force_key_update();
++        eprintln!("jump: migrated and key update queued on {path2_local}");
++    }
++
+     let (mut send, mut recv) = conn
+         .open_bi()
+         .await
