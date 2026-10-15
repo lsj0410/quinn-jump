@@ -17,9 +17,13 @@ git apply ../quinn-client-jump.patch
 
 ## How to run
 
+The [IP] is the address of the second network interface.
+Use ::1 to test without an additional network interface.
+In this case the second socket is bound to a different port.
+
 ```bash
 cargo run --example server ./
-cargo run --example client -- --jump --jump-addr ::1 https://localhost:4433/Cargo.toml
+cargo run --example client -- --jump --jump-addr [IP] https://localhost:4433/Cargo.toml
 ```
 
 ---
