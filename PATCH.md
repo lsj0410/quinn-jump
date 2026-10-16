@@ -18,15 +18,32 @@ git apply ../quinn-jump/quinn-client-jump.patch
 
 ## How to run
 
-The `--jump-addr` is the address of the second network interface.
-Use ::1 to test without an additional network interface.
-In this case the second socket is bound to a different port.
+### localhost, no additional network interface
+
+In this case the connection is migrated to a different port on the client.
 
 ```bash
 cargo run --example server ./
-cargo run --example client -- --jump --jump-addr <IP> https://localhost:4433/Cargo.toml
+cargo run --example client -- --jump --jump-addr ::1 https://localhost:4433/Cargo.toml
 ```
 
+### Two network interfaces
+
+Let the client have two network interfaces whose IP addresses are `ip1` and `ip2`.
+This experiment requires a remote server that can be accessed from both interfaces.
+
+```bash
+# On the server
+cargo run --example server -- --listen 0.0.0.0:4433 ./
+
+# Copy the server's cert.der to the client, then on the client:
+cargo run --example client -- \
+  --bind <ip1>:0 \
+  --jump --jump-addr <ip2> \
+  --ca cert.der \
+  --host localhost \
+  https://<server-ip>:4433/Cargo.toml
+```
 ---
 
 ## 1. New CLI flags (`Opt` struct)
